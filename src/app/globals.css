@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body { background: #171717; color: #fff; }
+.btn { @apply inline-flex items-center justify-center rounded-xl px-5 py-3 font-semibold transition active:scale-[.98] disabled:opacity-50; }
+.btn-primary { @apply btn bg-way-yellow text-way-black hover:brightness-110; }
+.btn-ghost { @apply btn border border-way-line text-white hover:border-way-yellow; }
+.input { @apply w-full rounded-xl border border-way-line bg-way-gray px-4 py-3 text-white outline-none focus:border-way-yellow; }
+.card { @apply rounded-2xl border border-way-line bg-way-gray p-4; }
