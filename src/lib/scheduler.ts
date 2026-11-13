@@ -1,6 +1,7 @@
 export type Slot = "qui_noite" | "dom_manha" | "dom_noite";
 export interface Service { date: string; slot: Slot }
 export interface Person { name: string; slots: Slot[] }
+export type NeededBySlot = Record<Slot, number>;
 export interface Assignment extends Service {
   names: string[];
   needed: number;
@@ -37,7 +38,8 @@ export function servicesOfMonth(year: number, month: number): Service[] {
  * Gera a escala do mês. Regras: só escala quem marcou o culto; equilibra o total;
  * evita cultos consecutivos; prioriza quem tem menos participações; nunca inventa nomes.
  */
-export function generateSchedule(services: Service[], people: Person[], perService: number) {
+export function generateSchedule(services: Service[], people: Person[], perService: number | NeededBySlot) {
+  const neededFor = (slot: Slot) => typeof perService === "number" ? perService : perService[slot];
   const n = services.length;
   const avail: string[][] = services.map((s) => people.filter((p) => p.slots.includes(s.slot)).map((p) => p.name));
   const options = new Map<string, number>(); // em quantos cultos cada pessoa está disponível
@@ -47,7 +49,7 @@ export function generateSchedule(services: Service[], people: Person[], perServi
   const counts: Record<string, number> = {};
   people.forEach((p) => (counts[p.name] = 0));
 
-  const seats = avail.reduce((t, l) => t + Math.min(perService, l.length), 0);
+  const seats = services.reduce((t, service, i) => t + Math.min(neededFor(service.slot), avail[i].length), 0);
   const cap = Math.max(1, Math.ceil(seats / Math.max(1, people.length)));
 
   const adjacent = (idx: number, nm: string) =>
@@ -56,7 +58,7 @@ export function generateSchedule(services: Service[], people: Person[], perServi
   // cultos mais restritos primeiro, para não "gastar" quem tem poucas opções
   const order = services.map((_, i) => i).sort((a, b) => avail[a].length - avail[b].length || a - b);
   for (const idx of order) {
-    for (let k = 0; k < perService; k++) {
+    for (let k = 0; k < neededFor(services[idx].slot); k++) {
       const cands = avail[idx].filter((nm) => !assigned[idx].includes(nm));
       if (!cands.length) break;
       cands.sort((a, b) => {
@@ -93,7 +95,7 @@ export function generateSchedule(services: Service[], people: Person[], perServi
   const assignments: Assignment[] = services.map((s, i) => ({
     ...s,
     names: assigned[i],
-    needed: perService,
+    needed: neededFor(s.slot),
     available: avail[i].length,
     missing: Math.max(0, perService - assigned[i].length),
   }));

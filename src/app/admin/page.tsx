@@ -4,7 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import Header from "@/components/Header";
 import ScheduleView from "@/components/ScheduleView";
 import { downloadPdf, whatsappText, whatsappUrl } from "@/lib/export";
-import { generateSchedule, servicesOfMonth, SLOTS, SLOT_INFO, type Slot } from "@/lib/scheduler.ts";
+import { generateSchedule, servicesOfMonth, SLOTS, SLOT_INFO, type Slot, type NeededBySlot } from "@/lib/scheduler.ts";
 import { MONTHS_PT, monthLabel, supabase, type Availability, type Month, type Row } from "@/lib/supabase";
 
 export default function Admin() {
@@ -242,10 +242,29 @@ function Equipe({ month, avail, reload }: { month: Month; avail: Availability[];
 }
 
 function Escala({ month, avail, rows, reload }: { month: Month; avail: Availability[]; rows: Row[]; reload: () => void }) {
-  const [per, setPer] = useState(month.per_service);
+  const defaults: NeededBySlot = { qui_noite: 2, dom_manha: 2, dom_noite: 2 };
+  const [per, setPer] = useState<NeededBySlot>({ ...defaults, ...(month.per_service_by_slot ?? {}) });
   const [exception, setException] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => setPer(month.per_service), [month.id, month.per_service]);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    setPer({ ...defaults, ...(month.per_service_by_slot ?? {}) });
+    setSaved(false);
+  }, [month.id, month.per_service_by_slot]);
+
+  function changeNeeded(slot: Slot, delta: number) {
+    setPer((current) => ({ ...current, [slot]: Math.min(10, Math.max(1, current[slot] + delta)) }));
+    setSaved(false);
+  }
+
+  async function salvarQuantidades() {
+    setBusy(true);
+    const { error } = await supabase.from("months").update({ per_service_by_slot: per }).eq("id", month.id);
+    setBusy(false);
+    if (error) return alert(`Não foi possível salvar as quantidades: ${error.message}`);
+    setSaved(true);
+    reload();
+  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {}; avail.forEach((a) => (c[a.name] = 0));
@@ -258,7 +277,8 @@ function Escala({ month, avail, rows, reload }: { month: Month; avail: Availabil
     if (!avail.length) return alert("Ainda não há disponibilidades neste mês.");
     setBusy(true);
     const { assignments } = generateSchedule(servicesOfMonth(month.year, month.month), avail.map((a) => ({ name: a.name, slots: a.slots as Slot[] })), per);
-    await supabase.from("months").update({ per_service: per }).eq("id", month.id);
+    const settings = await supabase.from("months").update({ per_service_by_slot: per }).eq("id", month.id);
+    if (settings.error) { setBusy(false); return alert(`Erro ao salvar configurações: ${settings.error.message}`); }
     const del = await supabase.from("schedule").delete().eq("month_id", month.id);
     const ins = await supabase.from("schedule").insert(assignments.map((a) => ({ month_id: month.id, service_date: a.date, slot: a.slot, names: a.names, needed: a.needed })));
     setBusy(false);
@@ -285,11 +305,27 @@ function Escala({ month, avail, rows, reload }: { month: Month; avail: Availabil
 
   return (
     <div className="space-y-4">
-      <div className="card space-y-3">
-        <label className="flex items-center gap-3">Fotógrafos por culto
-          <input className="input max-w-[90px]" type="number" min={1} value={per} onChange={(e) => setPer(Math.max(1, +e.target.value))} />
-        </label>
-        <button className="btn-primary w-full" onClick={gerar} disabled={busy}>{rows.length ? "REGERAR ESCALA" : "GERAR ESCALA AUTOMATICAMENTE"}</button>
+      <div className="card space-y-4">
+        <div>
+          <h2 className="font-semibold">Fotógrafos por culto</h2>
+          <p className="mt-1 text-sm text-white/60">Use os botões para definir quantas pessoas serão escaladas em cada tipo de culto.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {SLOTS.map((slot) => (
+            <div key={slot} className="rounded-xl border border-way-line bg-way-black/40 p-3">
+              <div className="min-h-10 text-sm font-semibold" style={{ color: SLOT_INFO[slot].color }}>{SLOT_INFO[slot].label}</div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <button type="button" aria-label={`Diminuir fotógrafos de ${SLOT_INFO[slot].label}`} onClick={() => changeNeeded(slot, -1)} disabled={per[slot] <= 1 || busy} className="h-11 w-11 rounded-xl border border-way-line text-2xl font-bold hover:border-way-yellow disabled:opacity-30">−</button>
+                <div className="text-center"><div className="text-3xl font-extrabold text-way-yellow tabular-nums">{per[slot]}</div><div className="text-xs text-white/50">fotógrafo(s)</div></div>
+                <button type="button" aria-label={`Aumentar fotógrafos de ${SLOT_INFO[slot].label}`} onClick={() => changeNeeded(slot, 1)} disabled={per[slot] >= 10 || busy} className="h-11 w-11 rounded-xl border border-way-line text-2xl font-bold hover:border-way-yellow disabled:opacity-30">+</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button className="btn-ghost flex-1" onClick={salvarQuantidades} disabled={busy || saved}>{busy ? "SALVANDO..." : saved ? "CONFIGURAÇÕES SALVAS ✓" : "SALVAR QUANTIDADES"}</button>
+          <button className="btn-primary flex-1" onClick={gerar} disabled={busy}>{busy ? "PROCESSANDO..." : rows.length ? "REGERAR ESCALA" : "GERAR ESCALA AUTOMATICAMENTE"}</button>
+        </div>
         <label className="flex items-center gap-2 text-sm text-white/70"><input type="checkbox" checked={exception} onChange={(e) => setException(e.target.checked)} /> Permitir exceções (escalar quem não marcou o culto) nas edições manuais</label>
       </div>
       {rows.length > 0 && (

@@ -4,7 +4,7 @@ const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 export const configured = Boolean(url && key);
 export const supabase = createClient(url || "http://localhost", key || "missing");
 
-export interface Month { id: string; year: number; month: number; status: "open" | "closed"; per_service: number }
+export interface Month { id: string; year: number; month: number; status: "open" | "closed"; per_service: number; per_service_by_slot?: Partial<Record<import("./scheduler.ts").Slot, number>> }
 export interface Availability { id: string; month_id: string; name: string; name_key: string; slots: string[] }
 export interface Row { id: string; month_id: string; service_date: string; slot: import("./scheduler.ts").Slot; names: string[]; needed: number }
 
