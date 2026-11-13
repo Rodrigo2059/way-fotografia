@@ -97,7 +97,7 @@ export function generateSchedule(services: Service[], people: Person[], perServi
     names: assigned[i],
     needed: neededFor(s.slot),
     available: avail[i].length,
-    missing: Math.max(0, perService - assigned[i].length),
+    missing: Math.max(0, neededFor(s.slot) - assigned[i].length),
   }));
   return { assignments, counts };
 }
